@@ -1,0 +1,15 @@
+[package]
+name = "baloot-client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bincode = "*"
+baloot-common = { path = "../baloot-common" }
+smol = "*"
+
+[dependencies.tungstenite]
+version = "*"
+default-features = false

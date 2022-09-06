@@ -1,0 +1,1 @@
+../pkg/baloot_wa.js
