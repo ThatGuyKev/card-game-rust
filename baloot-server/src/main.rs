@@ -5,7 +5,7 @@ use futures::{
     channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
     future::join,
     lock::Mutex,
-    SinkExt, StreamExt,
+    StreamExt,
 };
 use std::{collections::HashMap, future, io::Error as IoError, sync::Arc};
 
@@ -192,10 +192,7 @@ async fn handle_connection(rooms: RoomList, raw_stream: TcpStream, addr: SocketA
                 let room = Arc::new(Mutex::new(Room::default()));
                 let handle = RoomHandle { write, room };
 
-                let room_name = {
-                    let map = &mut rooms.lock().await;
-                    "untamed monsters".to_string()
-                };
+                let room_name = "cute dog".to_string();
                 println!("[{}] Welcome {} to room {}", addr, player_name, room_name);
 
                 handle.room.lock().await.name = room_name.clone();
