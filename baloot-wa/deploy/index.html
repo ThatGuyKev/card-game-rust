@@ -13,6 +13,7 @@
       }
       run();
     </script>
+    <div id="playing"></div>
     <div id="join">
       <form id="join_form">
         <p>
@@ -28,6 +29,7 @@
       </p>
     </div>
     <div id="game">
+      <div id="room_name"></div>
       <div id="svg_div">
         <div id="hand"></div>
         <div id="table"></div>
@@ -40,6 +42,17 @@
           <input id="chat_input" placeholder="Send Message..." />
         </div>
       </div>
+    </div>
+    <div>
+      <table id="score_table">
+        <tbody id="score_rows">
+          <tr>
+            <th style="width: 20px"></th>
+            <th style="width: 100%">Player</th>
+            <th style="width: 60%">Score</th>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </body>
 </html>

@@ -5,7 +5,7 @@ use futures::{
     channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
     future::join,
     lock::Mutex,
-    StreamExt,
+    SinkExt, StreamExt,
 };
 use std::{collections::HashMap, future, io::Error as IoError, sync::Arc};
 
@@ -60,7 +60,7 @@ impl Room {
             ws: Some(ws_tx.clone()),
         });
 
-        let mut player_index: usize = 1;
+        let mut player_index: usize = 0;
 
         self.connections.insert(addr, player_index);
 
@@ -140,12 +140,12 @@ async fn run_player(
         .map(WebsocketMessage::Binary)
         .map(Ok)
         .forward(incoming);
+
     use bincode::Options;
     let config = bincode::config::DefaultOptions::new()
         .with_fixint_encoding()
         .allow_trailing_bytes()
         .with_limit(1024 * 1024);
-
     let rb = outgoing
         .map(|m| match m {
             Ok(WebsocketMessage::Binary(t)) => config.deserialize::<ClientMessage>(&t).ok(),
@@ -156,22 +156,21 @@ async fn run_player(
         .chain(futures::stream::once(async { ClientMessage::Disconnected }))
         .map(move |m| Ok((addr, m)))
         .forward(write);
-
     let (ra, rb) = join(ra, rb).await;
 
     if let Err(e) = ra {
         println!(
-            "[{}] Got error {} from player {}'s rx queue",
-            addr, e, player_name
+            "[{}] got error {} from player {} rx queue",
+            addr, player_name, e
         );
     }
+
     if let Err(e) = rb {
         println!(
-            "[{}] Got error {} from player {}'s tx queue",
-            addr, e, player_name
+            "[{}] got error {} from player {} tx queue",
+            addr, player_name, e
         );
     }
-    println!("[{}] Finished session with {}", addr, player_name);
 }
 
 async fn handle_connection(rooms: RoomList, raw_stream: TcpStream, addr: SocketAddr) -> Result<()> {
@@ -203,20 +202,21 @@ async fn handle_connection(rooms: RoomList, raw_stream: TcpStream, addr: SocketA
 
                 let mut h = handle.clone();
 
-                // h.run_room(read);
-
-                // join(
-                //     h.run_room(read),
-                //     run_player(player_name, addr, handle, ws_stream),
-                // )
-                // .await;
+                join(
+                    h.run_room(read),
+                    run_player(player_name, addr, handle, ws_stream),
+                )
+                .await;
+                println!("[{}] closing room", room_name);
+                return Ok(());
             }
             msg => {
                 println!("[{}] Unknown message received {:?}", addr, msg);
+                break;
             }
         }
     }
-
+    println!("[{}] Dropping connection..", addr);
     Ok(())
 }
 

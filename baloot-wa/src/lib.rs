@@ -194,24 +194,6 @@ impl CreateOrJoin {
     }
 }
 
-// struct Declaring {
-//     base: Base,
-//     player_index: usize,
-//     active_player: usize,
-//     player_names: Vec<String>,
-// }
-
-// impl Declaring {
-//     fn on_call(&mut self, call: &Calling) -> JsError {
-//         Ok(())
-//     }
-//     fn on_player_turn(&mut self, active_player: usize) -> JsError {
-//         Ok(())
-//     }
-//     fn on_declared(&mut self, call: &Calling) -> JsError {
-//         Ok(())
-//     }
-// }
 struct Playing {
     base: Base,
 
@@ -257,7 +239,6 @@ impl Playing {
                 console_log!("sending message..");
                 HANDLE.lock().unwrap().on_send_chat()
             } else {
-                console_log!("we don't know :(");
                 Ok(())
             }
         });
@@ -281,20 +262,20 @@ impl Playing {
             player_names: Vec::new(),
             _keyup_cb: keyup_cb,
         };
-        let s = out
-            .score_table
-            .child_nodes()
-            .item(out.player_index as u32 + 3)
-            .expect("Could not get table row")
-            .child_nodes()
-            .item(2)
-            .expect("Could not get score value")
-            .child_nodes()
-            .item(1)
-            .expect("Could not get second span")
-            .dyn_into::<HtmlElement>()?;
+        // let s = out
+        //     .score_table
+        //     .child_nodes()
+        //     .item(out.player_index as u32 + 3)
+        //     .expect("Could not get table row")
+        //     .child_nodes()
+        //     .item(2)
+        //     .expect("Could not get score value")
+        //     .child_nodes()
+        //     .item(1)
+        //     .expect("Could not get second span")
+        //     .dyn_into::<HtmlElement>()?;
 
-        out.table.tentative_score_span = Some(s);
+        // out.table.tentative_score_span = Some(s);
         Ok(out)
     }
 
@@ -374,6 +355,7 @@ unsafe impl Send for State {}
 
 lazy_static::lazy_static! {
     static ref HANDLE: Mutex<State> = Mutex::new(State::Empty);
+
 }
 
 #[must_use]
@@ -447,7 +429,7 @@ pub fn main() -> JsError {
         let mut data = vec![0; buf.length() as usize];
         buf.copy_to(&mut data[..]);
         let msg = bincode::deserialize(&data[..])
-            .map_err(|e| JsValue::from_str("failed to deserialize"))
+            .map_err(|e| JsValue::from_str(&format!("failed to deserialize {}", e)))
             .expect("could not decode message");
         on_message(msg).expect("message matching failed")
     }) as Box<dyn FnMut(ProgressEvent)>);
@@ -462,6 +444,24 @@ pub fn main() -> JsError {
     })
     .forget();
 
+    set_event_cb(&ws, "close", move |_: Event| -> JsError {
+        let doc = web_sys::window()
+            .expect("no global `window` exists")
+            .document()
+            .expect("should have a document on window");
+        for d in ["join", "playing"].iter() {
+            doc.get_element_by_id(d)
+                .expect("Could not get major div")
+                .dyn_into::<HtmlElement>()?
+                .set_hidden(true);
+        }
+        doc.get_element_by_id("disconnected")
+            .expect("Could not get disconnected div")
+            .dyn_into::<HtmlElement>()?
+            .set_hidden(false);
+        Ok(())
+    })
+    .forget();
     let base = Base { doc, ws };
 
     base.doc
