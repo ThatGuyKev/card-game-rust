@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 pub enum Suit {
     Spades,
     Diamonds,
@@ -7,7 +7,7 @@ pub enum Suit {
     Hearts,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 pub enum Rank {
     Seven,
     Eight,
@@ -21,7 +21,7 @@ pub enum Rank {
 
 pub type Card = (Rank, Suit);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Calling {
     Hokom,
     Sun,
@@ -30,7 +30,7 @@ pub enum Calling {
     Pass,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ClientMessage {
     CreateRoom(String),
     JoinedRoom(String, String),
@@ -39,17 +39,16 @@ pub enum ClientMessage {
     Disconnected,
     Declare(Calling, Suit),
 }
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ServerMessage {
     JoinedRoom {
         room_name: String,
-        players: Vec<(String, u32, bool)>,
+        players: Vec<(String, bool)>,
         active_player: usize,
         player_index: usize,
-        deck: Vec<Card>,
     },
     JoinFailed(String),
-
+    Information(String),
     NewPlayer(String),
     Chat {
         from: String,

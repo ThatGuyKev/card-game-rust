@@ -174,7 +174,7 @@ impl CreateOrJoin {
     fn on_joined_room(
         self,
         room_name: &str,
-        players: &[(String, u32, bool)],
+        players: &[(String, bool)],
         active_player: usize,
         player_index: usize,
     ) -> JsResult<Playing> {
@@ -188,6 +188,7 @@ impl CreateOrJoin {
             .set_hidden(true);
         let mut p = Playing::new(self.base, room_name, players, active_player, player_index)?;
         p.on_information("welcome")?;
+        console_log!("joined room");
 
         Ok(p)
     }
@@ -228,7 +229,7 @@ impl Playing {
     fn new(
         base: Base,
         room_name: &str,
-        players: &[(String, u32, bool)],
+        players: &[(String, bool)],
         active_player: usize,
         player_index: usize,
     ) -> JsResult<Playing> {
@@ -351,7 +352,7 @@ impl State {
             on_connected() -> CreateOrJoin,
         ],
         CreateOrJoin => [
-            on_joined_room(room_name: &str, players: &[(String, u32,bool)],active_player:usize, player_index: usize) -> Playing
+            on_joined_room(room_name: &str, players: &[(String,bool)],active_player:usize, player_index: usize) -> Playing
         ],
 
 
@@ -411,9 +412,9 @@ fn on_message(msg: ServerMessage) -> JsError {
             players,
             active_player,
             player_index,
-            deck,
         } => state.on_joined_room(&room_name, &players, active_player, player_index),
         Chat { from, message } => state.on_chat(&from, &message),
+        Information(message) => state.on_information(&message),
         msg => Ok(()),
     }
 }

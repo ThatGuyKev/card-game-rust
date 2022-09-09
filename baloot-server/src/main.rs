@@ -1,25 +1,21 @@
 use anyhow::Result;
+use async_std::net::{SocketAddr, TcpListener, TcpStream};
+use async_tungstenite::WebSocketStream;
 use futures::{
     channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
-    future::{self, join},
+    future::join,
     lock::Mutex,
     StreamExt,
 };
-use smol::{Async, Executor};
-use std::{
-    collections::HashMap,
-    io::Error as IoError,
-    net::{SocketAddr, TcpListener, TcpStream},
-    sync::Arc,
-};
+use std::{collections::HashMap, future, io::Error as IoError, sync::Arc};
 
-use baloot_common::{Card, ClientMessage, Game};
+use baloot_common::{Card, ClientMessage, Game, Rank, ServerMessage, Suit};
 use tungstenite::Message as WebsocketMessage;
 
 struct Player {
     name: String,
-    hand: HashMap<Card, usize>,
-    ws: Option<UnboundedSender<String>>,
+    hand: Vec<Card>,
+    ws: Option<UnboundedSender<ServerMessage>>,
 }
 struct Team {
     name: String,
@@ -37,6 +33,52 @@ struct Room {
     game: Game,
 }
 impl Room {
+    fn broadcast(&self, s: ServerMessage) {
+        for c in self.connections.values() {
+            if let Some(ws) = &self.players[*c].ws {
+                if let Err(e) = ws.unbounded_send(s.clone()) {
+                    println!(
+                        "[{}] Failed to send broadcast to {}: {}",
+                        self.name, self.players[*c].name, e
+                    );
+                }
+            }
+        }
+    }
+
+    fn add_player(
+        &mut self,
+        addr: SocketAddr,
+        player_name: String,
+        ws_tx: UnboundedSender<ServerMessage>,
+    ) -> Result<()> {
+        let mut hand = vec![(Rank::Ten, Suit::Spades)];
+
+        self.players.push(Player {
+            name: player_name,
+            hand,
+            ws: Some(ws_tx.clone()),
+        });
+
+        let mut player_index: usize = 1;
+
+        self.connections.insert(addr, player_index);
+
+        self.started = true;
+
+        ws_tx.unbounded_send(ServerMessage::JoinedRoom {
+            room_name: self.name.clone(),
+            players: self
+                .players
+                .iter()
+                .map(|p| (p.name.clone(), p.ws.is_some()))
+                .collect(),
+            active_player: self.active_player,
+            player_index,
+        })?;
+
+        Ok(())
+    }
     fn on_message(&mut self, addr: SocketAddr, msg: ClientMessage) -> bool {
         match msg {
             ClientMessage::Chat(c) => {
@@ -44,6 +86,10 @@ impl Room {
                     .connections
                     .get(&addr)
                     .map_or("unknown", |i| &self.players[*i].name);
+                self.broadcast(ServerMessage::Chat {
+                    from: name.to_string(),
+                    message: c,
+                });
                 println!("chat received!")
             }
             msg => println!("something came, {:?}", msg),
@@ -71,41 +117,79 @@ impl RoomHandle {
 }
 type RoomList = Arc<Mutex<HashMap<String, RoomHandle>>>;
 
-async fn handle_connection(
-    rooms: RoomList,
-    mut raw_stream: Async<TcpStream>,
+async fn run_player(
+    player_name: String,
     addr: SocketAddr,
-) -> Result<()> {
+    handle: RoomHandle,
+    ws_stream: WebSocketStream<TcpStream>,
+) {
+    let (incoming, outgoing) = ws_stream.split();
+
+    let (ws_tx, ws_rx) = unbounded();
+
+    {
+        let room = &mut handle.room.lock().await;
+        if let Err(e) = room.add_player(addr, player_name.clone(), ws_tx) {
+            println!("[{}] Failed to add player:  {:?}", room.name, e)
+        }
+    }
+
+    let write = handle.write.clone();
+    let ra = ws_rx
+        .map(|c| bincode::serialize(&c).unwrap_or_else(|_| panic!("Could not encode {:?}", c)))
+        .map(WebsocketMessage::Binary)
+        .map(Ok)
+        .forward(incoming);
+    use bincode::Options;
+    let config = bincode::config::DefaultOptions::new()
+        .with_fixint_encoding()
+        .allow_trailing_bytes()
+        .with_limit(1024 * 1024);
+
+    let rb = outgoing
+        .map(|m| match m {
+            Ok(WebsocketMessage::Binary(t)) => config.deserialize::<ClientMessage>(&t).ok(),
+            _ => None,
+        })
+        .take_while(|m| future::ready(m.is_some()))
+        .map(|m| m.unwrap())
+        .chain(futures::stream::once(async { ClientMessage::Disconnected }))
+        .map(move |m| Ok((addr, m)))
+        .forward(write);
+
+    let (ra, rb) = join(ra, rb).await;
+
+    if let Err(e) = ra {
+        println!(
+            "[{}] Got error {} from player {}'s rx queue",
+            addr, e, player_name
+        );
+    }
+    if let Err(e) = rb {
+        println!(
+            "[{}] Got error {} from player {}'s tx queue",
+            addr, e, player_name
+        );
+    }
+    println!("[{}] Finished session with {}", addr, player_name);
+}
+
+async fn handle_connection(rooms: RoomList, raw_stream: TcpStream, addr: SocketAddr) -> Result<()> {
     println!("[{}] Incoming TCP connection", addr);
-    // let mut buf = vec![];
 
-    // raw_stream.read_to_end(&mut buf)?;
-
-    // let mut ws_stream = tokio_tungstenite::accept_async(raw_stream).await.unwrap();
-    // while let Ok(t) = ws_stream.next().await {}
-    // println!("[{}] WebSocket connection established", addr);
-    // let msg = bincode::deserialize::<ClientMessage>(&buf).unwrap();
-    // println!("[{}] Received message {:?}", addr, msg);
-
-    // match msg {
-    //     ClientMessage::CreateRoom(player_name) => {
-    //         println!("[{}] Welcome {} to 'the creepy room :)'", addr, player_name)
-    //     }
-    //     msg => {
-    //         println!("[{}] Unknown message received {:?}", addr, msg);
-    //     }
-    // }
-
-    let mut ws_stream = async_tungstenite::accept_async(raw_stream).await?;
+    let mut ws_stream = async_tungstenite::accept_async(raw_stream)
+        .await
+        .expect("Failed to accept connection");
     println!("[{}] WebSocket connection established", addr);
+
     while let Some(Ok(WebsocketMessage::Binary(t))) = ws_stream.next().await {
-        println!("{:?}", t);
         let msg = bincode::deserialize::<ClientMessage>(&t)?;
         println!("[{}] Received message {:?}", addr, msg);
 
         match msg {
             ClientMessage::CreateRoom(player_name) => {
                 let (write, read) = unbounded();
+
                 let room = Arc::new(Mutex::new(Room::default()));
                 let handle = RoomHandle { write, room };
 
@@ -118,7 +202,14 @@ async fn handle_connection(
                 handle.room.lock().await.name = room_name.clone();
 
                 let mut h = handle.clone();
-                h.run_room(read).await;
+
+                // h.run_room(read);
+
+                // join(
+                //     h.run_room(read),
+                //     run_player(player_name, addr, handle, ws_stream),
+                // )
+                // .await;
             }
             msg => {
                 println!("[{}] Unknown message received {:?}", addr, msg);
@@ -129,34 +220,34 @@ async fn handle_connection(
     Ok(())
 }
 
-fn main() -> Result<(), IoError> {
-    // let ex = Executor::new();
+async fn run() {
+    {
+        let addr = "0.0.0.0:8080";
+        let rooms = RoomList::new(Mutex::new(HashMap::new()));
 
-    let addr = "0.0.0.0:8080";
-
-    let rooms = RoomList::new(Mutex::new(HashMap::new()));
-    // std::thread::spawn(move || smol::future::block_on(ex.run(future::pending::<()>())));
-
-    smol::future::block_on(async {
         println!("Listening on: {}", addr);
         // let listener = TcpListener::bind(addr).unwrap();
 
-        let listener = Async::<TcpListener>::bind(([127, 0, 0, 1], 8080))
+        let listener = TcpListener::bind(&addr)
+            .await
             .expect("Could not establish listener");
 
         while let Ok((stream, addr)) = listener.accept().await {
             println!("{}", addr);
             let rooms = rooms.clone();
 
-            smol::spawn(async move {
+            println!("trying to spawn a task");
+            async_std::task::spawn(async move {
                 println!("handling connection");
                 if let Err(e) = handle_connection(rooms, stream, addr).await {
                     println!("Failed to handle connection from {}: {}", addr, e)
                 }
-            })
-            .detach()
+            });
         }
-    });
+    }
+}
+fn main() -> Result<(), IoError> {
+    async_std::task::block_on(run());
 
     Ok(())
 }
