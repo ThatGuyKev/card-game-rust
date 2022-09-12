@@ -4,6 +4,7 @@
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sawa Baloot</title>
+    <link href="styles.css" rel="stylesheet" />
   </head>
   <body>
     <script type="module">
@@ -13,11 +14,13 @@
       }
       run();
     </script>
-    <div id="playing"></div>
+
     <div id="join">
       <form id="join_form">
         <p>
           <b>Name:</b><input id="name_input" placeholder="Kevero" required="" />
+          <p><b>Room:</b><input id="room_input" ></p>
+
         </p>
         <button id="play_button" type="submit">Play xD</button>
       </form>
@@ -28,10 +31,11 @@
         <span id="disconnected_msg">Could not connect to game server</span>
       </p>
     </div>
+
     <div id="game">
       <div id="room_name"></div>
+
       <div id="svg_div">
-        <div id="hand"></div>
         <div id="table"></div>
         <svg id="game_svg" width="100" height="100" viewBox="0 0 200 200"></svg>
       </div>
@@ -49,10 +53,117 @@
           <tr>
             <th style="width: 20px"></th>
             <th style="width: 100%">Player</th>
-            <th style="width: 60%">Score</th>
+            <th style="width: 60%">Connected</th>
           </tr>
         </tbody>
       </table>
+      <div id="count_div"></div>
+    </div>
+    <div id="playing">
+      <div id="hand" class="Hand">
+        <div class="Cards">
+          <article
+            class="Card"
+            data-id="0aab6b25-a8c3-42ab-b99a-4725288ee90a"
+            style="
+              opacity: 1;
+              transform: translate3d(0px, 20px, 0px) rotate(-4deg);
+              touch-action: none;
+              cursor: grab;
+              user-select: none;
+              z-index: 1011;
+            "
+          >
+            <figure class="Card-media" style="touch-action: none">
+              <img
+                src="/assets/ace-hearts.png"
+                alt="ace heats"
+                style="touch-action: none"
+              />
+            </figure>
+          </article>
+          <article
+            class="Card"
+            data-id="713d93a3-19a9-47bb-aae3-3b41da89107f"
+            style="
+              opacity: 1;
+              transform: translate3d(0px, 5px, 0px) rotate(-2deg);
+              touch-action: none;
+              cursor: grab;
+              user-select: none;
+              z-index: 1018;
+            "
+          >
+            <figure class="Card-media" style="touch-action: none">
+              <img
+                src="/assets/king-spades.png"
+                alt="Strike"
+                style="touch-action: none"
+              />
+            </figure>
+          </article>
+          <article
+            class="Card"
+            data-id="713d93a3-19a9-47bb-aae3-3b41da89107f"
+            style="
+              opacity: 1;
+              transform: translate3d(0px, 0px, 0px);
+              touch-action: none;
+              cursor: grab;
+              user-select: none;
+              z-index: 1024;
+            "
+          >
+            <figure class="Card-media" style="touch-action: none">
+              <img
+                src="/assets/queen-diamonds.png"
+                alt="Strike"
+                style="touch-action: none"
+              />
+            </figure>
+          </article>
+          <article
+            class="Card"
+            data-id="713d93a3-19a9-47bb-aae3-3b41da89107f"
+            style="
+              opacity: 1;
+              transform: translate3d(0px, 5px, 0px) rotate(2deg);
+              touch-action: none;
+              cursor: grab;
+              user-select: none;
+              z-index: 1026;
+            "
+          >
+            <figure class="Card-media" style="touch-action: none">
+              <img
+                src="/assets/jack-clubs.png"
+                alt="Strike"
+                style="touch-action: none"
+              />
+            </figure>
+          </article>
+          <article
+            class="Card"
+            data-id="713d93a3-19a9-47bb-aae3-3b41da89107f"
+            style="
+              opacity: 1;
+              transform: translate3d(0px, 20px, 0px) rotate(4deg);
+              touch-action: none;
+              cursor: grab;
+              user-select: none;
+              z-index: 1027;
+            "
+          >
+            <figure class="Card-media" style="touch-action: none">
+              <img
+                src="/assets/ten-hearts.png"
+                alt="Strike"
+                style="touch-action: none"
+              />
+            </figure>
+          </article>
+        </div>
+      </div>
     </div>
   </body>
 </html>

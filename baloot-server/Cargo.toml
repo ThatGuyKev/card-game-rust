@@ -13,6 +13,8 @@ baloot-common = { path = "../baloot-common" }
 smol = "*"
 anyhow = "*"
 bincode = "*"
+lazy_static = "*"
+rand = "*"
 
 [dependencies.tungstenite]
 version = "*"

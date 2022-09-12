@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 serde = { version = "*", features = ["derive"] }
 serde_derive = "*"
+# rand = "*"

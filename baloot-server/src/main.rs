@@ -5,28 +5,37 @@ use futures::{
     channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender},
     future::join,
     lock::Mutex,
-    StreamExt,
+    SinkExt, StreamExt,
 };
+use rand::Rng;
 use std::{collections::HashMap, future, io::Error as IoError, sync::Arc};
 
-use baloot_common::{Card, ClientMessage, Game, Rank, ServerMessage, Suit};
+use baloot_common::{Card, ClientMessage, Game, ServerMessage};
 use tungstenite::Message as WebsocketMessage;
 
+lazy_static::lazy_static! {
+    // words.txt is the EFF's random word list for passphrases
+    static ref WORD_LIST: Vec<&'static str> = include_str!("words.txt")
+        .split('\n')
+        .filter(|w| !w.is_empty())
+        .collect();
+}
+#[derive(Debug)]
 struct Player {
     name: String,
-    hand: Vec<Card>,
+    hand: HashMap<Card, usize>,
     ws: Option<UnboundedSender<ServerMessage>>,
 }
-struct Team {
-    name: String,
-    score: u32,
-    players: Vec<Player>,
-}
+// struct Team {
+//     name: String,
+//     score: u32,
+//     players: Vec<Player>,
+// }
 #[derive(Default)]
 struct Room {
     name: String,
     started: bool,
-    ended: bool,
+    // ended: bool,
     connections: HashMap<SocketAddr, usize>,
     players: Vec<Player>,
     active_player: usize,
@@ -52,15 +61,31 @@ impl Room {
         player_name: String,
         ws_tx: UnboundedSender<ServerMessage>,
     ) -> Result<()> {
-        let mut hand = vec![(Rank::Ten, Suit::Spades)];
+        let hand = self.game.deal(1);
 
-        self.players.push(Player {
-            name: player_name,
-            hand,
-            ws: Some(ws_tx.clone()),
-        });
+        let mut player_index = None;
+        for (i, p) in self.players.iter().enumerate() {
+            println!("{} is found {:?}", p.name, p.ws);
 
-        let mut player_index: usize = 0;
+            if p.name == player_name {
+                player_index = Some(i);
+                break;
+            }
+        }
+        if let Some(i) = player_index {
+            self.players[i].hand = hand;
+            self.players[i].ws = Some(ws_tx.clone());
+        } else {
+            player_index = Some(self.players.len());
+
+            self.players.push(Player {
+                name: player_name,
+                hand,
+                ws: Some(ws_tx.clone()),
+            });
+        }
+
+        let player_index = player_index.unwrap();
 
         self.connections.insert(addr, player_index);
 
@@ -173,6 +198,24 @@ async fn run_player(
     }
 }
 
+fn next_room_name(rooms: &mut HashMap<String, RoomHandle>, handle: RoomHandle) -> String {
+    // This loop should only run once, unless we're starting to saturate the
+    // space of possible room names (which is quite large)
+    let mut rng = rand::thread_rng();
+    loop {
+        let room_name = format!(
+            "{} {}",
+            WORD_LIST[rng.gen_range(0..WORD_LIST.len())],
+            WORD_LIST[rng.gen_range(0..WORD_LIST.len())],
+        );
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(v) = rooms.entry(room_name.clone()) {
+            v.insert(handle);
+            return room_name;
+        }
+    }
+}
+
 async fn handle_connection(rooms: RoomList, raw_stream: TcpStream, addr: SocketAddr) -> Result<()> {
     println!("[{}] Incoming TCP connection", addr);
 
@@ -191,8 +234,10 @@ async fn handle_connection(rooms: RoomList, raw_stream: TcpStream, addr: SocketA
 
                 let room = Arc::new(Mutex::new(Room::default()));
                 let handle = RoomHandle { write, room };
-
-                let room_name = "cute dog".to_string();
+                let room_name = {
+                    let map = &mut rooms.lock().await;
+                    next_room_name(map, handle.clone())
+                };
                 println!("[{}] Welcome {} to room {}", addr, player_name, room_name);
 
                 handle.room.lock().await.name = room_name.clone();
@@ -206,6 +251,24 @@ async fn handle_connection(rooms: RoomList, raw_stream: TcpStream, addr: SocketA
                 .await;
                 println!("[{}] closing room", room_name);
                 return Ok(());
+            }
+            ClientMessage::JoinRoom(name, room_name) => {
+                println!("[{}] Player {} sent JoinRoom({})", addr, name, room_name);
+
+                let handle = rooms.lock().await.get_mut(&room_name).cloned();
+
+                if let Some(h) = handle {
+                    println!("[{}] player {} joined room {}", addr, name, room_name);
+
+                    run_player(name, addr, h, ws_stream).await;
+                    return Ok(());
+                } else {
+                    println!("[{}] could not find room {}", addr, room_name);
+
+                    let msg = ServerMessage::JoinFailed("Could not find room".to_string());
+                    let encoded = bincode::serialize(&msg)?;
+                    ws_stream.send(WebsocketMessage::Binary(encoded)).await?;
+                }
             }
             msg => {
                 println!("[{}] Unknown message received {:?}", addr, msg);

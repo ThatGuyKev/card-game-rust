@@ -1,5 +1,11 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+
+// use rand::seq::SliceRandom;
+// use rand::thread_rng;
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Suit {
     Spades,
     Diamonds,
@@ -7,7 +13,7 @@ pub enum Suit {
     Hearts,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Rank {
     Seven,
     Eight,
@@ -22,7 +28,7 @@ pub enum Rank {
 pub type Card = (Rank, Suit);
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub enum Calling {
+pub enum Declaration {
     Hokom,
     Sun,
     SecondHokom,
@@ -33,11 +39,11 @@ pub enum Calling {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ClientMessage {
     CreateRoom(String),
-    JoinedRoom(String, String),
+    JoinRoom(String, String),
     Chat(String),
+    Declare(Declaration),
     Play(Card),
     Disconnected,
-    Declare(Calling, Suit),
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ServerMessage {
@@ -48,6 +54,12 @@ pub enum ServerMessage {
         player_index: usize,
     },
     JoinFailed(String),
+    PlayerTurn(usize),
+    Played(Card),
+    TeamScore {
+        delta: u32,
+        total: u32,
+    },
     Information(String),
     NewPlayer(String),
     Chat {
@@ -71,5 +83,20 @@ impl Default for Game {
         }
         // deck.shuffle(&mut thread_rng());
         Game { deck }
+    }
+}
+impl Game {
+    // pub fn shuffle(&mut self) {
+    //     self.deck.shuffle(&mut thread_rng());
+    // }
+
+    pub fn deal(&mut self, n: usize) -> HashMap<Card, usize> {
+        let mut out = HashMap::new();
+        for _ in 0..n {
+            if let Some(c) = self.deck.pop() {
+                *out.entry(c).or_insert(0) += 1;
+            }
+        }
+        out
     }
 }

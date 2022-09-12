@@ -1,0 +1,69 @@
+/* Normal card layout in one row */
+.Cards {
+  display: flex;
+  flex-flow: row nowrap;
+  justify-content: center;
+  min-height: var(--card-height);
+}
+.Cards > * {
+  width: var(--card-width);
+  height: var(--card-height);
+  flex-shrink: 1;
+}
+.Cards--grid {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.Card {
+  position: relative;
+  display: flex;
+}
+.Card-inner {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-flow: column nowrap;
+  text-align: center;
+}
+.Card-media {
+  margin: 0;
+}
+.Card-media img {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  object-position: center top;
+}
+@media (max-height: 500px) {
+  .Card-media img {
+    height: 70px;
+  }
+}
+.Hand .Card[disabled] .EnergyBadge {
+  color: red;
+}
+
+/* In your hand, the cards stack a bit */
+.Hand {
+  margin-top: 1rem;
+  margin-bottom: -1rem;
+}
+.Hand .Cards {
+  padding-left: 4rem;
+  padding-right: 4rem;
+}
+.Hand .Card {
+  margin-left: -1.5rem;
+  /* margin-bottom: -3rem; */
+  cursor: grab;
+}
+.Hand .Card[disabled] {
+  cursor: not-allowed;
+}
+.Hand .Card:hover {
+  /* transition-duration: 60ms; */
+  /* transform: translate3d(0, -1rem, 0) scale(1.25) rotate(0deg) !important; */
+  box-shadow: 0 0 0.75em gold;
+  z-index: 1;
+}

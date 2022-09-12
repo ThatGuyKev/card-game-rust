@@ -12,7 +12,7 @@ use web_sys::{
     KeyboardEvent, SvgGraphicsElement, WebSocket,
 };
 
-use baloot_common::{Calling, Card, ClientMessage, ServerMessage, Suit};
+use baloot_common::{Card, ClientMessage, Declaration, ServerMessage, Suit};
 
 macro_rules! console_log {
     ($($t:tt)*) => (web_sys::console::log_1(&format!($($t)*).into()))
@@ -70,7 +70,7 @@ pub struct Table {
 
     my_turn: bool,
     hand: Vec<Card>,
-    declaration: Calling,
+    declaration: Declaration,
     top_suit: Suit,
     cards_played: Vec<Card>,
 }
@@ -91,7 +91,7 @@ impl Table {
             svg,
             svg_div,
             tentative_score_span: None,
-            declaration: Calling::Pass,
+            declaration: Declaration::Pass,
             top_suit: Suit::Clubs,
             hand: Vec::new(),
             my_turn: false,
@@ -128,7 +128,10 @@ impl Connecting {
 struct CreateOrJoin {
     base: Base,
     name_input: HtmlInputElement,
+    room_input: HtmlInputElement,
     play_button: HtmlButtonElement,
+    _input_cb: JsClosure<Event>,
+    _room_invalid_cb: JsClosure<Event>,
     _submit_cb: JsClosure<Event>,
 }
 impl CreateOrJoin {
@@ -139,6 +142,19 @@ impl CreateOrJoin {
             .expect("could not find name_input")
             .dyn_into::<HtmlInputElement>()?;
 
+        let room_input = base
+            .doc
+            .get_element_by_id("room_input")
+            .expect("could not find room_input")
+            .dyn_into::<HtmlInputElement>()?;
+
+        let room_invalid_cb = set_event_cb(&room_input, "invalid", |_: Event| {
+            HANDLE.lock().unwrap().on_room_name_invalid()
+        });
+
+        let input_cb = set_event_cb(&room_input, "input", move |e: Event| {
+            HANDLE.lock().unwrap().on_join_inputs_changed()
+        });
         let form = base
             .doc
             .get_element_by_id("join_form")
@@ -153,21 +169,33 @@ impl CreateOrJoin {
             .get_element_by_id("play_button")
             .expect("could not find play_button")
             .dyn_into::<HtmlButtonElement>()?;
-        play_button.set_text_content(Some("Create new room"));
+        play_button.set_text_content(Some(if room_input.value().is_empty() {
+            "Create new room"
+        } else {
+            "Join existing room"
+        }));
         play_button.class_list().remove_1("disabled")?;
 
         Ok(CreateOrJoin {
             base,
             name_input,
+            room_input,
             play_button,
+            _input_cb: input_cb,
+            _room_invalid_cb: room_invalid_cb,
             _submit_cb: submit_cb,
         })
     }
     fn on_join_button(&self) -> JsError {
         self.play_button.set_disabled(true);
         let name = self.name_input.value();
+        let room = self.room_input.value();
 
-        let msg = ClientMessage::CreateRoom(name);
+        let msg = if room.is_empty() {
+            ClientMessage::CreateRoom(name)
+        } else {
+            ClientMessage::JoinRoom(name, room)
+        };
         self.base.send(msg)
     }
 
@@ -191,6 +219,20 @@ impl CreateOrJoin {
         console_log!("joined room");
 
         Ok(p)
+    }
+
+    fn on_room_name_invalid(&self) -> JsError {
+        self.room_input.set_custom_validity("two lowercase words");
+        Ok(())
+    }
+    fn on_join_inputs_changed(&self) -> JsError {
+        self.play_button
+            .set_text_content(Some(if self.room_input.value().is_empty() {
+                "Create new room"
+            } else {
+                "Join existing room"
+            }));
+        Ok(())
     }
 }
 
@@ -262,20 +304,22 @@ impl Playing {
             player_names: Vec::new(),
             _keyup_cb: keyup_cb,
         };
-        // let s = out
-        //     .score_table
-        //     .child_nodes()
-        //     .item(out.player_index as u32 + 3)
-        //     .expect("Could not get table row")
-        //     .child_nodes()
-        //     .item(2)
-        //     .expect("Could not get score value")
-        //     .child_nodes()
-        //     .item(1)
-        //     .expect("Could not get second span")
-        //     .dyn_into::<HtmlElement>()?;
+        for (i, (name, connected)) in players.iter().enumerate() {
+            out.add_player_row(name, *connected, i == player_index)?;
+        }
 
-        // out.table.tentative_score_span = Some(s);
+        let s = out
+            .score_table
+            .child_nodes()
+            .item(out.player_index as u32 + 3)
+            .expect("Could not get table row")
+            .child_nodes()
+            .item(2)
+            .expect("Could not get score value")
+            .child_nodes()
+            .dyn_into::<HtmlElement>()?;
+
+        out.table.tentative_score_span = Some(s);
         Ok(out)
     }
 
@@ -318,6 +362,38 @@ impl Playing {
         self.chat_div.set_scroll_top(self.chat_div.scroll_height());
         Ok(())
     }
+    fn add_player_row(&mut self, name: &str, connected: bool, is_you: bool) -> JsError {
+        let tr = self.base.doc.create_element("tr")?;
+
+        let td = self.base.doc.create_element("td")?;
+        let i = self.base.doc.create_element("i")?;
+        td.append_child(&i)?;
+        tr.append_child(&td)?;
+
+        let td = self.base.doc.create_element("td")?;
+        if is_you {
+            td.set_text_content(Some(&format!("{} (you)", name)));
+        } else {
+            td.set_text_content(Some(name));
+        }
+        tr.append_child(&td)?;
+
+        let td = self.base.doc.create_element("td")?;
+        let connection_span = self.base.doc.create_element("span")?;
+        connection_span.set_text_content(Some(&connected.to_string()));
+        td.append_child(&connection_span)?;
+
+        tr.append_child(&td)?;
+
+        if !connected {
+            tr.class_list().add_1("disconnected")?;
+        }
+
+        self.score_table.append_child(&tr)?;
+        self.player_names.push(name.to_string());
+
+        Ok(())
+    }
 }
 enum State {
     Connecting(Connecting),
@@ -346,6 +422,8 @@ impl State {
         ],
         CreateOrJoin => [
             on_join_button(),
+            on_room_name_invalid(),
+            on_join_inputs_changed(),
         ]
 
     );
