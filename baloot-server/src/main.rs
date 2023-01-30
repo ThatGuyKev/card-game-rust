@@ -26,11 +26,7 @@ struct Player {
     hand: HashMap<Card, usize>,
     ws: Option<UnboundedSender<ServerMessage>>,
 }
-// struct Team {
-//     name: String,
-//     score: u32,
-//     players: Vec<Player>,
-// }
+
 #[derive(Default)]
 struct Room {
     name: String,

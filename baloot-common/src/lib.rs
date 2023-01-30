@@ -15,24 +15,26 @@ pub enum Suit {
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Rank {
+    Ace,
+    Two,
+    Three,
+    Four,
+    Five,
+    Six
     Seven,
     Eight,
     Nine,
+    Ten,
     Jack,
     Queen,
     King,
-    Ten,
-    Ace,
 }
 
 pub type Card = (Rank, Suit);
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Declaration {
-    Hokom,
-    Sun,
-    SecondHokom,
-    Ashka,
+    Pedrita,
     Pass,
 }
 
@@ -41,8 +43,7 @@ pub enum ClientMessage {
     CreateRoom(String),
     JoinRoom(String, String),
     Chat(String),
-    Declare(Declaration),
-    Play(Card),
+    Play(Declaration),
     Disconnected,
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -56,7 +57,7 @@ pub enum ServerMessage {
     JoinFailed(String),
     PlayerTurn(usize),
     Played(Card),
-    TeamScore {
+    Score {
         delta: u32,
         total: u32,
     },
@@ -76,7 +77,7 @@ impl Default for Game {
         use Rank::*;
         use Suit::*;
         let mut deck = Vec::new();
-        for r in &[Seven, Eight, Nine, Jack, Queen, King, Ten, Ace] {
+        for r in &[Ace, Tow, Three, Four, Five, Six, Seven, Eight, Nine,Ten, Jack, Queen, King ] {
             for s in &[Spades, Hearts, Diamonds, Clubs] {
                 deck.push((*r, *s))
             }
